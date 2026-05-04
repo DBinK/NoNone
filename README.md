@@ -241,7 +241,11 @@ match get_user_score_nonone(123):
 
 ```bash
 uv pip install nonone
-# 或者
+```
+
+或者
+
+```bash
 pip install nonone
 ```
 
