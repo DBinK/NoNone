@@ -1,6 +1,6 @@
 [project]
 name = "nonone"
-version = "0.1.8"
+version = "0.1.9"
 description = "A modern, lightweight Rust-style Result type for Python 3.10+ pattern matching."
 readme = "README.md"
 authors = [
