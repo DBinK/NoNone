@@ -1,12 +1,13 @@
 from __future__ import annotations
 from dataclasses import dataclass
-from typing import Generic, TypeVar, Callable, Any, TypeAlias
+from typing import Generic, TypeVar, Callable, Any, TypeAlias, NoReturn, ParamSpec
 import functools
 
 T = TypeVar("T")
 E = TypeVar("E")
 U = TypeVar("U")
 F = TypeVar("F")
+P = ParamSpec("P")  # 用于保留装饰器参数签名
 
 
 class UnwrapError(RuntimeError):
@@ -14,7 +15,7 @@ class UnwrapError(RuntimeError):
 
 
 # -------------------- 成功分支 --------------------
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Ok(Generic[T, E]):
     value: T
 
@@ -27,7 +28,7 @@ class Ok(Generic[T, E]):
     def unwrap(self) -> T:
         return self.value
 
-    def unwrap_err(self) -> E:
+    def unwrap_err(self) -> NoReturn:
         raise UnwrapError(f"Called unwrap_err() on an Ok: {self.value!r}")
 
     def unwrap_or(self, default: T) -> T:
@@ -61,7 +62,7 @@ class Ok(Generic[T, E]):
 
 
 # -------------------- 失败分支 --------------------
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Err(Generic[T, E]):
     error: E
 
@@ -83,7 +84,7 @@ class Err(Generic[T, E]):
     def unwrap_or_else(self, op: Callable[[E], T]) -> T:
         return op(self.error)
 
-    def expect(self, msg: str) -> T:
+    def expect(self, msg: str) -> NoReturn:
         raise UnwrapError(f"{msg}: {self.error!r}")
 
     def map(self, f: Callable[[T], U]) -> Err[U, E]:
@@ -111,7 +112,7 @@ class Err(Generic[T, E]):
 Result: TypeAlias = Ok[T, E] | Err[T, E]
 
 
-# -------------------- 小写构造器（Rust 风格） --------------------
+# -------------------- 辅助构造器 --------------------
 def ok(value: T) -> Ok[T, Any]:
     """小写构造器，返回 Ok[T, Any]（错误类型留作 Any）。"""
     return Ok(value)
@@ -123,13 +124,13 @@ def err(error: E) -> Err[Any, E]:
 
 
 # -------------------- 装饰器：将普通函数变为返回 Result 的函数 --------------------
-def catch(func: Callable[..., T]) -> Callable[..., Result[T, Exception]]:
+def catch(func: Callable[P, T]) -> Callable[P, Result[T, Exception]]:
     """
-    装饰器。自动捕获函数内部的异常，
-    将正常返回值包装为 Ok(value)，异常包装为 Err(exception)。
+    装饰器。自动捕获异常并返回 Result。
+    利用 ParamSpec 完美保留了原函数的参数类型提示。
     """
     @functools.wraps(func)
-    def wrapper(*args: Any, **kwargs: Any) -> Result[T, Exception]:
+    def wrapper(*args: P.args, **kwargs: P.kwargs) -> Result[T, Exception]:
         try:
             return Ok(func(*args, **kwargs))
         except Exception as e:
@@ -138,7 +139,7 @@ def catch(func: Callable[..., T]) -> Callable[..., Result[T, Exception]]:
 
 
 # -------------------- 函数式调用：立即执行函数并返回 Result --------------------
-def try_catch(func: Callable[..., T], *args: Any, **kwargs: Any) -> Result[T, Exception]:
+def try_catch(func: Callable[P, T], *args: P.args, **kwargs: P.kwargs) -> Result[T, Exception]:
     """手动调用：立即执行函数并返回 Result。"""
     try:
         return Ok(func(*args, **kwargs))
