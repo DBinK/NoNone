@@ -377,6 +377,291 @@ match divide_with_info(10, 2):
 
 ---
 
+## API 参考
+
+### 类型定义
+
+```python
+Result: TypeAlias = Ok[T, E] | Err[T, E]
+```
+
+### 构造器
+
+#### `ok(value: T) -> Ok[T, Any]`
+创建成功的 Result 实例。
+
+**参数**
+- `value`: 成功时返回的值
+
+**返回值**
+- `Ok[T, Any]` - 成功的 Result，错误类型为 `Any`
+
+**示例**
+```python
+result = ok(42)        # Ok(42)
+result = ok("success") # Ok("success")
+```
+
+#### `err(error: E) -> Err[Any, E]`
+创建失败的 Result 实例。
+
+**参数**
+- `error`: 错误信息或异常对象
+
+**返回值**
+- `Err[Any, E]` - 失败的 Result，成功类型为 `Any`
+
+**示例**
+```python
+result = err("出错了")     # Err("出错了")
+result = err(ValueError("无效值")) # Err(ValueError("无效值"))
+```
+
+### 装饰器和工具函数
+
+#### `@catch`
+装饰器，自动捕获函数中的异常并返回 Result。
+
+**适用场景**
+- 将现有函数一键转换为返回 Result 的函数
+- 统一异常处理，避免遗漏异常类型
+
+**示例**
+```python
+@catch
+def divide(a: float, b: float) -> float:
+    return a / b
+
+result = divide(10, 0)  # Err(ZeroDivisionError(...))
+```
+
+#### `try_catch(func: Callable[P, T], *args, **kwargs) -> Result[T, Exception]`
+立即执行函数并返回 Result，无需修改原函数定义。
+
+**参数**
+- `func`: 要执行的函数
+- `*args`, `**kwargs`: 传递给函数的参数
+
+**返回值**
+- `Result[T, Exception]` - 执行结果
+
+**示例**
+```python
+def parse_number(s: str) -> float:
+    return float(s)
+
+result = try_catch(parse_number, "abc")  # Err(ValueError(...))
+```
+
+### 状态检查方法
+
+#### `is_ok() -> bool`
+检查是否为成功状态。
+
+**返回值**
+- `True` - 如果是 `Ok`
+- `False` - 如果是 `Err`
+
+**示例**
+```python
+ok(42).is_ok()      # True
+err("error").is_ok() # False
+```
+
+#### `is_err() -> bool`
+检查是否为错误状态。
+
+**返回值**
+- `True` - 如果是 `Err`
+- `False` - 如果是 `Ok`
+
+**示例**
+```python
+ok(42).is_err()      # False
+err("error").is_err() # True
+```
+
+### 值提取方法（谨慎使用）
+
+#### `unwrap() -> T`
+提取成功值，如果是 `Err` 则抛出 `UnwrapError` 异常。
+
+**警告**
+- 仅在确定结果是 `Ok` 时使用
+- 生产代码建议使用模式匹配或链式调用
+
+**示例**
+```python
+ok(42).unwrap()        # 42
+err("error").unwrap()  # 抛出 UnwrapError
+```
+
+#### `unwrap_err() -> E`
+提取错误值，如果是 `Ok` 则抛出 `UnwrapError` 异常。
+
+**示例**
+```python
+err("error").unwrap_err() # "error"
+ok(42).unwrap_err()      # 抛出 UnwrapError
+```
+
+#### `unwrap_or(default: T) -> T`
+返回成功值或默认值。
+
+**参数**
+- `default`: 当结果是 `Err` 时返回的默认值
+
+**示例**
+```python
+ok(42).unwrap_or(0)        # 42
+err("error").unwrap_or(0)   # 0
+```
+
+#### `unwrap_or_else(op: Callable[[E], T]) -> T`
+返回成功值或用错误值调用函数的结果。
+
+**参数**
+- `op`: 接收错误值并返回默认值的函数
+
+**示例**
+```python
+ok(42).unwrap_or_else(str)           # 42
+err("error").unwrap_or_else(len)      # 5 (字符串长度)
+```
+
+#### `expect(msg: str) -> T`
+返回成功值，如果是 `Err` 则抛出带自定义消息的 `UnwrapError`。
+
+**参数**
+- `msg`: 自定义错误消息
+
+**示例**
+```python
+ok(42).expect("应该成功")        # 42
+err("error").expect("应该成功")  # 抛出 UnwrapError("应该成功: error")
+```
+
+### 链式操作方法
+
+#### `map(f: Callable[[T], U]) -> Result[U, E]`
+对成功值应用函数，保持错误类型不变。
+
+**参数**
+- `f`: 接收成功值并返回新值的函数
+
+**返回值**
+- `Ok(f(value))` - 如果是 `Ok`
+- `Err(error)` - 如果是 `Err`（无操作）
+
+**示例**
+```python
+ok(42).map(str)         # Ok("42")
+err("error").map(str)   # Err("error")
+```
+
+#### `map_err(f: Callable[[E], F]) -> Result[T, F]`
+对错误值应用函数，保持成功类型不变。
+
+**参数**
+- `f`: 接收错误值并返回新错误值的函数
+
+**返回值**
+- `Ok(value)` - 如果是 `Ok`（无操作）
+- `Err(f(error))` - 如果是 `Err`
+
+**示例**
+```python
+ok(42).map_err(str.upper)      # Ok(42)
+err("error").map_err(str.upper) # Err("ERROR")
+```
+
+#### `and_then(f: Callable[[T], Result[U, E]]) -> Result[U, E]`
+链式调用，用成功值调用返回 Result 的函数。
+
+**参数**
+- `f`: 接收成功值并返回新 Result 的函数
+
+**返回值**
+- `f(value)` - 如果是 `Ok`
+- `Err(error)` - 如果是 `Err`（短路，不调用 `f`）
+
+**示例**
+```python
+def double(x: int) -> Result[int, str]:
+    return ok(x * 2)
+
+ok(42).and_then(double)        # Ok(84)
+err("error").and_then(double)  # Err("error")
+```
+
+#### `try_and_then(f: Callable[[T], U]) -> Result[U, Exception | E]`
+安全链式调用，将不返回 Result 的函数包装为 Result。
+
+**参数**
+- `f`: 接收成功值并可能抛出异常的函数
+
+**返回值**
+- `Ok(f(value))` - 如果是 `Ok` 且函数成功
+- `Err(exception)` - 如果是 `Ok` 且函数抛出异常
+- `Err(error)` - 如果是 `Err`（无操作）
+
+**示例**
+```python
+def risky_divide(x: int) -> float:
+    return 100 / x
+
+ok(2).try_and_then(risky_divide)      # Ok(50.0)
+ok(0).try_and_then(risky_divide)      # Err(ZeroDivisionError(...))
+err("error").try_and_then(risky_divide) # Err("error")
+```
+
+#### `or_else(f: Callable[[E], Result[T, F]]) -> Result[T, F]`
+错误恢复，用错误值调用函数尝试恢复。
+
+**参数**
+- `f`: 接收错误值并返回新 Result 的函数
+
+**返回值**
+- `Ok(value)` - 如果是 `Ok`（无操作）
+- `f(error)` - 如果是 `Err`
+
+**示例**
+```python
+def recover(error: str) -> Result[int, str]:
+    return ok(0)
+
+ok(42).or_else(recover)        # Ok(42)
+err("error").or_else(recover)  # Ok(0)
+```
+
+#### `inspect(func: Callable[[T | E], Any]) -> Result[T, E]`
+执行副作用函数后返回自身，用于调试和日志。
+
+**参数**
+- `func`: 对值执行副作用的函数
+
+**返回值**
+- 原始的 Result 实例
+
+**示例**
+```python
+# 对成功值执行副作用
+ok(42).inspect(print)  # 打印 42，返回 Ok(42)
+
+# 对错误值执行副作用  
+err("error").inspect(print)  # 打印 "error"，返回 Err("error")
+```
+
+### 异常类
+
+#### `UnwrapError`
+当在错误状态下调用 `unwrap()` 或 `unwrap_err()` 时抛出的异常。
+
+**继承关系**
+- `RuntimeError`
+
+---
+
 ### 许可协议
 
-本项目基于 MIT License 开源。
+本项目基于 MIT License 开源.
